@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Department } from './Department.entity';
 
 @Entity('budgets')
 export class Budget {
@@ -8,8 +9,14 @@ export class Budget {
   @Column({ type: 'varchar', length: 50 })
   tahun!: string;
 
-  @Column({ type: 'varchar', length: 50 })
-  department!: string;
+  // Kolom department sebagai foreign key
+  @Column({ type: 'varchar', length: 100 })
+  department_name!: string;
+
+  // Relasi ke tabel departments
+  @ManyToOne(() => Department)
+  @JoinColumn({ name: 'department_name', referencedColumnName: 'name' })
+  department_rel!: Department;
 
   @Column({ type: 'enum', enum: ['CAPEX', 'OPEX'] })
   jenis!: string;

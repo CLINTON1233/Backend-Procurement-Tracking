@@ -3,7 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Budget } from '../database/entities/Budget.entity';
 import { BudgetRequest } from '../database/entities/BudgetRequest.entity';
-import { Like } from 'typeorm'; // Import Like from typeorm
+import { Department } from '../database/entities/Department.entity';
+import { Like } from 'typeorm';
 
 @Injectable()
 export class BudgetService {
@@ -12,17 +13,29 @@ export class BudgetService {
     private budgetRepo: Repository<Budget>,
     @InjectRepository(BudgetRequest)
     private requestRepo: Repository<BudgetRequest>,
+    @InjectRepository(Department)
+    private departmentRepo: Repository<Department>,
   ) {}
 
   // ========== BUDGET MANAGEMENT ==========
   async getAllBudgets() {
     return await this.budgetRepo.find({
       where: { is_active: true },
-      order: { tahun: 'DESC', department: 'ASC' }
+      relations: ['department_rel'],
+      order: { tahun: 'DESC', department_name: 'ASC' }
     });
   }
 
   async createBudget(data: any) {
+    // Cek apakah department ada
+    const department = await this.departmentRepo.findOne({ 
+      where: { name: data.department_name } 
+    });
+    
+    if (!department) {
+      throw new Error(`Department ${data.department_name} not found`);
+    }
+
     const budget = this.budgetRepo.create({
       ...data,
       sisa_budget: data.total_budget 
@@ -32,11 +45,13 @@ export class BudgetService {
 
   async updateBudget(id: number, data: any) {
     await this.budgetRepo.update(id, data);
-    return await this.budgetRepo.findOne({ where: { id } });
+    return await this.budgetRepo.findOne({ 
+      where: { id },
+      relations: ['department_rel']
+    });
   }
 
   async deleteBudget(id: number) {
-    // Soft delete
     await this.budgetRepo.update(id, { is_active: false });
     return { message: 'Budget deleted' };
   }
@@ -44,13 +59,12 @@ export class BudgetService {
   // ========== REQUEST MANAGEMENT ==========
   async getAllRequests() {
     return await this.requestRepo.find({
-      relations: ['budget'],
+      relations: ['budget', 'department_rel'],
       order: { created_at: 'DESC' }
     });
   }
 
   async createRequest(data: any) {
-    // Generate no_request: REQ/2024/02/001
     const year = new Date().getFullYear();
     const month = String(new Date().getMonth() + 1).padStart(2, '0');
     
@@ -79,7 +93,7 @@ export class BudgetService {
   async submitRequest(id: number) {
     const request = await this.requestRepo.findOne({ 
       where: { id },
-      relations: ['budget']
+      relations: ['budget', 'department_rel']
     });
     
     if (!request) throw new Error('Request not found');
@@ -92,7 +106,6 @@ export class BudgetService {
       request.status = 'BUDGET_APPROVED';
       budget.sisa_budget = Number(budget.sisa_budget) - Number(request.estimasi_harga);
       await this.budgetRepo.save(budget);
-
     } else {
       request.status = 'BUDGET_REJECTED';
       request.catatan = `Budget tidak cukup. Sisa: Rp ${budget.sisa_budget.toLocaleString()}`;
