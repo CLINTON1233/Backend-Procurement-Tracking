@@ -1,6 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { Budget } from './Budget.entity';
-import { Department } from './Department.entity';
 
 @Entity('budget_requests')
 export class BudgetRequest {
@@ -8,7 +7,7 @@ export class BudgetRequest {
   id!: number;
 
   @Column({ type: 'varchar', length: 50, unique: true })
-  no_request!: string; 
+  request_no!: string;
 
   @Column({ type: 'varchar', length: 100 })
   requester_name!: string;
@@ -16,52 +15,52 @@ export class BudgetRequest {
   @Column({ type: 'varchar', length: 50 })
   requester_badge!: string;
 
-  // Kolom department sebagai foreign key
   @Column({ type: 'varchar', length: 100 })
-  department_name!: string;
+  department!: string;
 
-  // Relasi ke tabel departments
-  @ManyToOne(() => Department)
-  @JoinColumn({ name: 'department_name', referencedColumnName: 'name' })
-  department_rel!: Department;
-
-  @Column({ type: 'enum', enum: ['BARANG', 'JASA'] })
-  tipe_permintaan!: string;
+  @Column({ type: 'enum', enum: ['ITEM', 'SERVICE'] })
+  request_type!: string;
 
   @Column({ type: 'varchar', length: 255 })
-  nama_item!: string;
+  item_name!: string;
 
   @Column({ type: 'text' })
-  spesifikasi!: string;
+  specification!: string;
 
   @Column({ type: 'int' })
   quantity!: number;
 
   @Column({ type: 'decimal', precision: 15, scale: 2 })
-  estimasi_harga!: number;
+  estimated_unit_price!: number;
+
+  @Column({ type: 'decimal', precision: 15, scale: 2 })
+  estimated_total!: number;
 
   @Column({ type: 'enum', enum: ['CAPEX', 'OPEX'] })
-  jenis_budget!: string;
+  budget_type!: string;
 
   @ManyToOne(() => Budget)
   @JoinColumn({ name: 'budget_id' })
   budget!: Budget;
 
-  @Column({ type: 'int' })
+  @Column()
   budget_id!: number;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
-  lampiran: string | null = null;
+  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
+  reserved_amount!: number;
 
-  @Column({ 
-    type: 'enum', 
-    enum: ['DRAFT', 'SUBMITTED', 'BUDGET_APPROVED', 'BUDGET_REJECTED', 'WAITING_SR_MR', 'COMPLETED'],
+  @Column({ type: 'timestamp', nullable: true })
+  submitted_at!: Date;
+
+  @Column({
+    type: 'enum',
+    enum: ['DRAFT', 'SUBMITTED', 'BUDGET_APPROVED', 'BUDGET_REJECTED', 'WAITING_SR_MR'],
     default: 'DRAFT'
   })
-  status: string = 'DRAFT';
+  status!: string;
 
   @Column({ type: 'text', nullable: true })
-  catatan: string | null = null;
+  notes!: string;
 
   @CreateDateColumn()
   created_at!: Date;

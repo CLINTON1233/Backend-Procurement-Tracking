@@ -7,34 +7,56 @@ export class Budget {
   id!: number;
 
   @Column({ type: 'varchar', length: 50 })
-  tahun!: string;
+  fiscal_year!: string;
 
-  // Kolom department sebagai foreign key
   @Column({ type: 'varchar', length: 100 })
   department_name!: string;
 
-  // Relasi ke tabel departments
   @ManyToOne(() => Department)
   @JoinColumn({ name: 'department_name', referencedColumnName: 'name' })
   department_rel!: Department;
 
   @Column({ type: 'enum', enum: ['CAPEX', 'OPEX'] })
-  jenis!: string;
+  budget_type!: string;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  budget_code!: string;
 
   @Column({ type: 'varchar', length: 255 })
-  nama_budget!: string;
+  budget_name!: string;
 
   @Column({ type: 'decimal', precision: 15, scale: 2 })
-  total_budget!: number;
+  total_amount!: number;
 
   @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
-  sisa_budget: number = 0;
+  reserved_amount!: number;
+
+  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
+  used_amount!: number;
+
+  @Column({ type: 'decimal', precision: 15, scale: 2 })
+  remaining_amount!: number;
+
+  @Column({ type: 'date', nullable: true })
+  period_start!: Date;
+
+  @Column({ type: 'date', nullable: true })
+  period_end!: Date;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  budget_owner!: string;
+
+  @Column({ type: 'int', default: 0 })
+  revision_no!: number;
+
+  @Column({ type: 'timestamp', nullable: true })
+  last_revision_at!: Date;
 
   @Column({ type: 'text', nullable: true })
-  keterangan: string | null = null;
+  description!: string;
 
-  @Column({ type: 'boolean', default: true })
-  is_active: boolean = true;
+  @Column({ default: true })
+  is_active!: boolean;
 
   @CreateDateColumn()
   created_at!: Date;

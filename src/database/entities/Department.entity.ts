@@ -27,6 +27,6 @@ export class Department {
   budgets!: Budget[];
 
   // Relasi ke BudgetRequest
-  @OneToMany(() => BudgetRequest, (request) => request.department_rel)
+  @OneToMany(() => BudgetRequest, (request) => request.department)
   budget_requests!: BudgetRequest[];
 }
