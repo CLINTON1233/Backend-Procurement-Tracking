@@ -22,32 +22,56 @@ export class BudgetService {
     return await this.budgetRepo.find({
       where: { is_active: true },
       relations: ['department_rel'],
-      order: { tahun: 'DESC', department_name: 'ASC' }
+      order: { tahun: 'DESC', department_name: 'ASC' },
     });
   }
 
   async createBudget(data: any) {
-    // Cek apakah department ada
-    const department = await this.departmentRepo.findOne({ 
-      where: { name: data.department_name } 
-    });
-    
-    if (!department) {
-      throw new Error(`Department ${data.department_name} not found`);
-    }
+    try {
+      if (!data.department_name) {
+        throw new Error('Department name is required');
+      }
 
-    const budget = this.budgetRepo.create({
-      ...data,
-      sisa_budget: data.total_budget 
-    });
-    return await this.budgetRepo.save(budget);
+      const department = await this.departmentRepo.findOne({
+        where: { name: data.department_name },
+      });
+
+      if (!department) {
+        const newDept = await this.departmentRepo.save({
+          name: data.department_name,
+          is_active: true,
+        });
+        console.log(
+          `✅ Department ${data.department_name} created automatically`,
+        );
+      }
+
+      const budget = this.budgetRepo.create({
+        tahun: data.tahun,
+        department_name: data.department_name,
+        jenis: data.jenis,
+        nama_budget: data.nama_budget,
+        total_budget: data.total_budget,
+        sisa_budget: data.total_budget,
+        keterangan: data.keterangan || null,
+        is_active: true,
+      });
+
+      return await this.budgetRepo.save(budget);
+    } catch (error) {
+      console.error('Error creating budget:', error);
+      if (error instanceof Error) {
+        throw new Error(`Failed to create budget: ${error.message}`);
+      }
+      throw new Error('Failed to create budget');
+    }
   }
 
   async updateBudget(id: number, data: any) {
     await this.budgetRepo.update(id, data);
-    return await this.budgetRepo.findOne({ 
+    return await this.budgetRepo.findOne({
       where: { id },
-      relations: ['department_rel']
+      relations: ['department_rel'],
     });
   }
 
@@ -60,67 +84,68 @@ export class BudgetService {
   async getAllRequests() {
     return await this.requestRepo.find({
       relations: ['budget', 'department_rel'],
-      order: { created_at: 'DESC' }
+      order: { created_at: 'DESC' },
     });
   }
 
   async createRequest(data: any) {
     const year = new Date().getFullYear();
     const month = String(new Date().getMonth() + 1).padStart(2, '0');
-    
+
     const lastRequest = await this.requestRepo.findOne({
       where: { no_request: Like(`REQ/${year}/${month}/%`) },
-      order: { id: 'DESC' }
+      order: { id: 'DESC' },
     });
-    
+
     let sequence = '001';
     if (lastRequest) {
       const lastSeq = parseInt(lastRequest.no_request.split('/').pop() || '0');
       sequence = String(lastSeq + 1).padStart(3, '0');
     }
-    
+
     const no_request = `REQ/${year}/${month}/${sequence}`;
-    
+
     const request = this.requestRepo.create({
       ...data,
       no_request,
-      status: 'DRAFT'
+      status: 'DRAFT',
     });
-    
+
     return await this.requestRepo.save(request);
   }
 
   async submitRequest(id: number) {
-    const request = await this.requestRepo.findOne({ 
+    const request = await this.requestRepo.findOne({
       where: { id },
-      relations: ['budget', 'department_rel']
+      relations: ['budget', 'department_rel'],
     });
-    
+
     if (!request) throw new Error('Request not found');
-    const budget = await this.budgetRepo.findOne({ 
-      where: { id: request.budget_id } 
+    const budget = await this.budgetRepo.findOne({
+      where: { id: request.budget_id },
     });
-    if (!budget) throw new Error('Budget not found'); 
-    
+    if (!budget) throw new Error('Budget not found');
+
     if (budget.sisa_budget >= request.estimasi_harga) {
       request.status = 'BUDGET_APPROVED';
-      budget.sisa_budget = Number(budget.sisa_budget) - Number(request.estimasi_harga);
+      budget.sisa_budget =
+        Number(budget.sisa_budget) - Number(request.estimasi_harga);
       await this.budgetRepo.save(budget);
     } else {
       request.status = 'BUDGET_REJECTED';
       request.catatan = `Budget tidak cukup. Sisa: Rp ${budget.sisa_budget.toLocaleString()}`;
     }
-    
+
     return await this.requestRepo.save(request);
   }
 
   async chooseSRMR(id: number, tipe: 'SR' | 'MR') {
     const request = await this.requestRepo.findOne({ where: { id } });
     if (!request) throw new Error('Request not found');
-    
+
     request.status = 'WAITING_SR_MR';
     request.tipe_permintaan = tipe === 'SR' ? 'JASA' : 'BARANG';
-    
+
     return await this.requestRepo.save(request);
   }
 
@@ -129,26 +154,26 @@ export class BudgetService {
       .createQueryBuilder('budget')
       .select('SUM(budget.total_budget)', 'total')
       .getRawOne();
-      
+
     const totalSisa = await this.budgetRepo
       .createQueryBuilder('budget')
       .select('SUM(budget.sisa_budget)', 'total')
       .getRawOne();
-      
+
     const pendingRequests = await this.requestRepo.count({
-      where: { status: 'SUBMITTED' }
+      where: { status: 'SUBMITTED' },
     });
-    
+
     const approvedRequests = await this.requestRepo.count({
-      where: { status: 'BUDGET_APPROVED' }
+      where: { status: 'BUDGET_APPROVED' },
     });
-    
+
     return {
       total_budget: totalBudget.total || 0,
       total_sisa: totalSisa.total || 0,
       pending_requests: pendingRequests,
       approved_requests: approvedRequests,
-      budget_used: (totalBudget.total || 0) - (totalSisa.total || 0)
+      budget_used: (totalBudget.total || 0) - (totalSisa.total || 0),
     };
   }
 }

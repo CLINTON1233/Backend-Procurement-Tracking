@@ -1,14 +1,26 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common'; 
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Department } from '../database/entities/Department.entity';
 
 @Injectable()
-export class DepartmentService {
+export class DepartmentService implements OnModuleInit { 
   constructor(
     @InjectRepository(Department)
     private departmentRepo: Repository<Department>,
   ) {}
+
+  async onModuleInit() {
+    await this.seedDepartmentsIfEmpty();
+  }
+
+  async seedDepartmentsIfEmpty() {
+    const count = await this.departmentRepo.count();
+    if (count === 0) {
+      await this.seedDepartments();
+      console.log('✅ Departments seeded successfully');
+    }
+  }
 
   async getAllDepartments() {
     return await this.departmentRepo.find({
@@ -41,13 +53,21 @@ export class DepartmentService {
       "Works", "Yard"
     ];
 
+    const savedDepartments: Department[] = [];
     for (const deptName of departments) {
       const existing = await this.departmentRepo.findOne({ where: { name: deptName } });
       if (!existing) {
-        await this.departmentRepo.save({ name: deptName });
+        const saved = await this.departmentRepo.save({ 
+          name: deptName,
+          is_active: true 
+        });
+        savedDepartments.push(saved);
       }
     }
 
-    return { message: 'Departments seeded successfully' };
+    return { 
+      message: 'Departments seeded successfully',
+      count: savedDepartments.length 
+    };
   }
 }
