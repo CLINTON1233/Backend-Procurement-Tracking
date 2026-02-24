@@ -30,11 +30,24 @@ export class BudgetRequest {
   @Column({ type: 'int' })
   quantity!: number;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2 })
-  estimated_unit_price!: number;
+  // ===== MULTI-CURRENCY FIELDS =====
+  @Column({ type: 'varchar', length: 10, default: 'IDR' })
+  currency!: string;
+
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  exchange_rate!: number;
 
   @Column({ type: 'decimal', precision: 15, scale: 2 })
-  estimated_total!: number;
+  estimated_unit_price!: number; // Dalam currency yang dipilih
+
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  estimated_unit_price_idr!: number; // Dalam IDR
+
+  @Column({ type: 'decimal', precision: 15, scale: 2 })
+  estimated_total!: number; // Dalam currency yang dipilih
+
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  estimated_total_idr!: number; // Dalam IDR
 
   @Column({ type: 'enum', enum: ['CAPEX', 'OPEX'] })
   budget_type!: string;
@@ -48,6 +61,9 @@ export class BudgetRequest {
 
   @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
   reserved_amount!: number;
+
+  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
+  reserved_amount_idr!: number;
 
   @Column({ type: 'timestamp', nullable: true })
   submitted_at!: Date;
