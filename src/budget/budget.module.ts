@@ -6,10 +6,11 @@ import { Department } from '../database/entities/Department.entity';
 import { BudgetController } from './budget.controller';
 import { BudgetService } from './budget.service';
 import { DepartmentModule } from '../department/department.module'; 
+import { BudgetRevision } from '../database/entities/BudgetRevision.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Budget, BudgetRequest, Department]),
+    TypeOrmModule.forFeature([Budget, BudgetRequest, BudgetRevision, Department]),
     DepartmentModule, 
   ],
   controllers: [BudgetController],

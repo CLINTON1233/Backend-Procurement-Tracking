@@ -5,6 +5,7 @@ import { Budget } from '../database/entities/Budget.entity';
 import { BudgetRequest } from '../database/entities/BudgetRequest.entity';
 import { Department } from '../database/entities/Department.entity';
 import { Like } from 'typeorm';
+import { BudgetRevision } from 'src/database/entities/BudgetRevision.entity';
 
 const CURRENCY_RATES = {
   IDR: 1,
@@ -41,6 +42,8 @@ export class BudgetService {
     private budgetRepo: Repository<Budget>,
     @InjectRepository(BudgetRequest)
     private requestRepo: Repository<BudgetRequest>,
+    @InjectRepository(BudgetRevision)
+    private revisionRepo: Repository<BudgetRevision>,
     @InjectRepository(Department)
     private departmentRepo: Repository<Department>,
   ) {}
@@ -54,6 +57,26 @@ export class BudgetService {
     });
   }
 
+ async getBudgetById(id: number) {
+  try {
+    const budget = await this.budgetRepo.findOne({
+      where: { id },
+      relations: ['department_rel'],
+    });
+
+    if (!budget) {
+      throw new Error('Budget not found');
+    }
+
+    return budget;
+  } catch (error) {
+    console.error('Error getting budget by id:', error);
+    if (error instanceof Error) {
+      throw new Error(`Failed to get budget: ${error.message}`);
+    }
+    throw new Error('Failed to get budget');
+  }
+}
 async createBudget(data: any) {
   try {
     if (!data.department_name) {
@@ -330,6 +353,54 @@ async createRequest(data: any) {
   }
 }
 
+async deleteRequest(id: number) {
+  try {
+    const request = await this.requestRepo.findOne({
+      where: { id },
+    });
+
+    if (!request) {
+      throw new Error('Request not found');
+    }
+
+    if (request.status === 'BUDGET_APPROVED') {
+      throw new Error('Cannot delete approved request');
+    }
+
+    if (request.reserved_amount > 0 && request.budget_id) {
+      const budget = await this.budgetRepo.findOne({
+        where: { id: request.budget_id },
+      });
+
+      if (budget) {
+        // Kembalikan dana yang di-reserved
+        budget.remaining_amount = Number(budget.remaining_amount) + Number(request.reserved_amount);
+        budget.used_amount = Number(budget.used_amount) - Number(request.reserved_amount);
+        budget.remaining_amount_idr = Number(budget.remaining_amount_idr) + Number(request.reserved_amount_idr);
+        budget.used_amount_idr = Number(budget.used_amount_idr) - Number(request.reserved_amount_idr);
+        
+        await this.budgetRepo.save(budget);
+      }
+    }
+    const result = await this.requestRepo.delete(id);
+
+    if (result.affected === 0) {
+      throw new Error('Request not found');
+    }
+
+    return { 
+      message: 'Request deleted successfully',
+      success: true 
+    };
+  } catch (error) {
+    console.error('Error deleting request:', error);
+    if (error instanceof Error) {
+      throw new Error(`Failed to delete request: ${error.message}`);
+    }
+    throw new Error('Failed to delete request');
+  }
+}
+
 async submitRequest(id: number) {
   const request = await this.requestRepo.findOne({
     where: { id },
@@ -361,6 +432,89 @@ async submitRequest(id: number) {
   }
 
   return await this.requestRepo.save(request);
+}
+
+// Revision 
+async getAllRevisions() {
+  return await this.revisionRepo.find({
+    relations: ['request', 'budget'],
+    order: { created_at: 'DESC' },
+  });
+}
+
+async createRevision(data: any) {
+  try {
+    // Validasi request exists
+    const request = await this.requestRepo.findOne({
+      where: { id: data.request_id },
+    });
+
+    if (!request) {
+      throw new Error('Request not found');
+    }
+
+    // Validasi budget exists
+    const budget = await this.budgetRepo.findOne({
+      where: { id: data.budget_id },
+    });
+
+    if (!budget) {
+      throw new Error('Budget not found');
+    }
+
+    // Simpan snapshot data lama untuk history
+    const previousData = {
+      request: { ...request },
+      budget: { ...budget },
+    };
+
+    // Update budget dengan amount baru
+    const oldAmount = Number(request.estimated_total);
+    const newAmount = Number(data.new_amount);
+    const difference = oldAmount - newAmount;
+
+    // Update remaining amount di budget
+    budget.remaining_amount = Number(budget.remaining_amount) + difference;
+    budget.remaining_amount_idr = convertToIDR(budget.remaining_amount, budget.currency);
+    
+    // Update used amount di budget
+    budget.used_amount = Number(budget.used_amount) - difference;
+    budget.used_amount_idr = convertToIDR(budget.used_amount, budget.currency);
+
+    // Update revision number
+    budget.revision_no = (budget.revision_no || 0) + 1;
+    budget.last_revision_at = new Date();
+
+    // Update request dengan amount baru
+    request.estimated_total = newAmount;
+    request.estimated_total_idr = convertToIDR(newAmount, request.currency);
+    request.notes = data.notes || request.notes;
+
+    // Simpan perubahan
+    await this.budgetRepo.save(budget);
+    await this.requestRepo.save(request);
+
+    // Simpan revision history
+    const revision = this.revisionRepo.create({
+      request_id: data.request_id,
+      budget_id: data.budget_id,
+      original_amount: data.original_amount,
+      new_amount: data.new_amount,
+      reduction_percentage: data.reduction_percentage,
+      currency: data.currency,
+      reason: data.reason,
+      previous_data: previousData,
+      revised_by: data.revised_by || 'system', 
+    });
+
+    return await this.revisionRepo.save(revision);
+  } catch (error) {
+    console.error('Error creating revision:', error);
+    if (error instanceof Error) {
+      throw new Error(`Failed to create revision: ${error.message}`);
+    }
+    throw new Error('Failed to create revision');
+  }
 }
 
 async chooseSRMR(id: number, tipe: 'SR' | 'MR') {

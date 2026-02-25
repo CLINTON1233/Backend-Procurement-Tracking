@@ -11,6 +11,11 @@ export class BudgetController {
     return this.budgetService.getAllBudgets();
   }
 
+   @Get('detail/:id')
+  getBudgetById(@Param('id') id: number) {
+    return this.budgetService.getBudgetById(id);
+  }
+
   @Post('create')
   createBudget(@Body() data: any) {
     return this.budgetService.createBudget(data);
@@ -37,6 +42,11 @@ export class BudgetController {
     return this.budgetService.createRequest(data);
   }
 
+  @Delete('request/delete/:id')
+  deleteRequest(@Param('id') id: number) {
+    return this.budgetService.deleteRequest(id);
+  }
+
   @Put('request/submit/:id')
   submitRequest(@Param('id') id: number) {
     return this.budgetService.submitRequest(id);
@@ -50,5 +60,17 @@ export class BudgetController {
   @Get('dashboard/stats')
   getDashboardStats() {
     return this.budgetService.getDashboardStats();
+  }
+
+  // ===== REVISIONS =====
+  @Get('revisions/list')
+  getallRevisions() {
+    return this.budgetService.getAllRevisions();
+
+  }
+
+  @Post('revision/create')
+  createRevision(@Body() data: any) {
+    return this.budgetService.createRevision(data);
   }
 }

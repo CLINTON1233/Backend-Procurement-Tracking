@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Budget } from './database/entities/Budget.entity';
 import { BudgetRequest } from './database/entities/BudgetRequest.entity';
 import { Department } from './database/entities/Department.entity';
+import { BudgetRevision } from './database/entities/BudgetRevision.entity'; 
 import { BudgetModule } from './budget/budget.module';
 import { DepartmentModule } from './department/department.module';
 
@@ -15,7 +16,7 @@ import { DepartmentModule } from './department/department.module';
       username: 'postgres',
       password: 'Sukses12345', 
       database: 'procurement',
-      entities: [Budget, BudgetRequest, Department],
+      entities: [Budget, BudgetRequest, Department, BudgetRevision],
       synchronize: true, 
     }),
     BudgetModule,
