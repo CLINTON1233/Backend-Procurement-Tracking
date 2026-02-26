@@ -372,59 +372,66 @@ export class BudgetService {
     }
   }
 
-  async deleteRequest(id: number) {
-    try {
-      const request = await this.requestRepo.findOne({
-        where: { id },
+async deleteRequest(id: number) {
+  try {
+    const request = await this.requestRepo.findOne({
+      where: { id },
+    });
+
+    if (!request) {
+      throw new Error('Request not found');
+    }
+
+    if (request.status === 'BUDGET_APPROVED') {
+      throw new Error('Cannot delete approved request');
+    }
+
+    const revisions = await this.revisionRepo.find({
+      where: { request_id: id }
+    });
+
+    console.log(`Found ${revisions.length} related revisions`);
+    
+    if (request.reserved_amount > 0 && request.budget_id) {
+      const budget = await this.budgetRepo.findOne({
+        where: { id: request.budget_id },
       });
 
-      if (!request) {
-        throw new Error('Request not found');
+      if (budget) {
+        budget.remaining_amount =
+          Number(budget.remaining_amount) + Number(request.reserved_amount);
+        budget.used_amount =
+          Number(budget.used_amount) - Number(request.reserved_amount);
+        budget.remaining_amount_idr =
+          Number(budget.remaining_amount_idr) +
+          Number(request.reserved_amount_idr);
+        budget.used_amount_idr =
+          Number(budget.used_amount_idr) -
+          Number(request.reserved_amount_idr);
+
+        await this.budgetRepo.save(budget);
       }
-
-      if (request.status === 'BUDGET_APPROVED') {
-        throw new Error('Cannot delete approved request');
-      }
-
-      if (request.reserved_amount > 0 && request.budget_id) {
-        const budget = await this.budgetRepo.findOne({
-          where: { id: request.budget_id },
-        });
-
-        if (budget) {
-          // Kembalikan dana yang di-reserved
-          budget.remaining_amount =
-            Number(budget.remaining_amount) + Number(request.reserved_amount);
-          budget.used_amount =
-            Number(budget.used_amount) - Number(request.reserved_amount);
-          budget.remaining_amount_idr =
-            Number(budget.remaining_amount_idr) +
-            Number(request.reserved_amount_idr);
-          budget.used_amount_idr =
-            Number(budget.used_amount_idr) -
-            Number(request.reserved_amount_idr);
-
-          await this.budgetRepo.save(budget);
-        }
-      }
-      const result = await this.requestRepo.delete(id);
-
-      if (result.affected === 0) {
-        throw new Error('Request not found');
-      }
-
-      return {
-        message: 'Request deleted successfully',
-        success: true,
-      };
-    } catch (error) {
-      console.error('Error deleting request:', error);
-      if (error instanceof Error) {
-        throw new Error(`Failed to delete request: ${error.message}`);
-      }
-      throw new Error('Failed to delete request');
     }
+
+    const result = await this.requestRepo.delete(id);
+
+    if (result.affected === 0) {
+      throw new Error('Request not found');
+    }
+
+    return {
+      message: 'Request and related revisions deleted successfully',
+      success: true,
+      revisions_deleted: revisions.length
+    };
+  } catch (error) {
+    console.error('Error deleting request:', error);
+    if (error instanceof Error) {
+      throw new Error(`Failed to delete request: ${error.message}`);
+    }
+    throw new Error('Failed to delete request');
   }
+}
 
   async submitRequest(id: number) {
     const request = await this.requestRepo.findOne({

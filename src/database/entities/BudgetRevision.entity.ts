@@ -10,7 +10,7 @@ export class BudgetRevision {
   @Column()
   request_id!: number;
 
-  @ManyToOne(() => BudgetRequest)
+  @ManyToOne(() => BudgetRequest, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'request_id' })
   request!: BudgetRequest;
 
