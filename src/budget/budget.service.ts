@@ -293,84 +293,113 @@ export class BudgetService {
     }
   }
 
-  async createRequest(data: any) {
-    try {
-      const year = new Date().getFullYear();
-      const month = String(new Date().getMonth() + 1).padStart(2, '0');
+async createRequest(data: any) {
+  try {
+    const year = new Date().getFullYear();
+    const month = String(new Date().getMonth() + 1).padStart(2, '0');
 
-      const lastRequest = await this.requestRepo.findOne({
-        where: { request_no: Like(`REQ/${year}/${month}/%`) },
-        order: { id: 'DESC' },
-      });
+    const lastRequest = await this.requestRepo.findOne({
+      where: { request_no: Like(`REQ/${year}/${month}/%`) },
+      order: { id: 'DESC' },
+    });
 
-      let sequence = '001';
-      if (lastRequest) {
-        const lastSeq = parseInt(
-          lastRequest.request_no.split('/').pop() || '0',
-        );
-        sequence = String(lastSeq + 1).padStart(3, '0');
-      }
-
-      const request_no = `REQ/${year}/${month}/${sequence}`;
-
-      // Validasi budget exists
-      let budgetCurrency = 'IDR';
-      let exchangeRate = 1;
-
-      if (data.budget_id) {
-        const budget = await this.budgetRepo.findOne({
-          where: { id: data.budget_id },
-        });
-        if (!budget) {
-          throw new Error(`Budget with ID ${data.budget_id} not found`);
-        }
-        budgetCurrency = budget.currency;
-        exchangeRate = budget.exchange_rate || 1;
-      }
-
-      const currency = data.currency || budgetCurrency;
-      const rate = getExchangeRate(currency);
-
-      const estimatedUnitPrice = Number(data.estimated_unit_price) || 0;
-      const quantity = Number(data.quantity) || 0;
-      const estimatedTotal = estimatedUnitPrice * quantity;
-
-      const estimatedUnitPriceIdr = convertToIDR(estimatedUnitPrice, currency);
-      const estimatedTotalIdr = convertToIDR(estimatedTotal, currency);
-
-      const request = this.requestRepo.create({
-        request_no,
-        requester_name: data.requester_name,
-        requester_badge: data.requester_badge,
-        department: data.department,
-        request_type: data.request_type,
-        item_name: data.item_name,
-        specification: data.specification,
-        quantity: quantity,
-        currency,
-        exchange_rate: rate,
-        estimated_unit_price: estimatedUnitPrice,
-        estimated_unit_price_idr: estimatedUnitPriceIdr,
-        estimated_total: estimatedTotal,
-        estimated_total_idr: estimatedTotalIdr,
-        budget_type: data.budget_type,
-        budget_id: data.budget_id,
-        notes: data.notes || null,
-        status: 'DRAFT',
-      });
-
-      const saved = await this.requestRepo.save(request);
-      console.log('Request created:', saved.request_no);
-
-      return saved;
-    } catch (error) {
-      console.error('Error creating request:', error);
-      if (error instanceof Error) {
-        throw new Error(`Failed to create request: ${error.message}`);
-      }
-      throw new Error('Failed to create request');
+    let sequence = '001';
+    if (lastRequest) {
+      const lastSeq = parseInt(
+        lastRequest.request_no.split('/').pop() || '0',
+      );
+      sequence = String(lastSeq + 1).padStart(3, '0');
     }
+
+    const request_no = `REQ/${year}/${month}/${sequence}`;
+
+    // Validasi budget exists
+    let budgetCurrency = 'IDR';
+    let exchangeRate = 1;
+
+    if (!data.budget_id) {
+      throw new Error('Budget ID is required');
+    }
+
+    const budget = await this.budgetRepo.findOne({
+      where: { id: data.budget_id },
+    });
+    
+    if (!budget) {
+      throw new Error(`Budget with ID ${data.budget_id} not found`);
+    }
+    
+    budgetCurrency = budget.currency;
+    exchangeRate = budget.exchange_rate || 1;
+
+    // Hitung total semua request yang sudah disetujui (APPROVED) untuk budget ini
+    const approvedRequests = await this.requestRepo.find({
+      where: { 
+        budget_id: data.budget_id,
+        status: 'BUDGET_APPROVED'
+      },
+    });
+
+    const totalApprovedAmount = approvedRequests.reduce(
+      (sum, req) => sum + Number(req.estimated_total), 
+      0
+    );
+
+    const currency = data.currency || budgetCurrency;
+    const estimatedUnitPrice = Number(data.estimated_unit_price) || 0;
+    const quantity = Number(data.quantity) || 0;
+    const estimatedTotal = estimatedUnitPrice * quantity;
+
+    // Cek apakah total request (approved + new) melebihi budget
+    const totalRequestedAmount = totalApprovedAmount + estimatedTotal;
+    
+    if (totalRequestedAmount > Number(budget.total_amount)) {
+      throw new Error(
+        `Cannot create request. Total approved requests: ${totalApprovedAmount.toLocaleString()} ${budget.currency}, ` +
+        `New request: ${estimatedTotal.toLocaleString()} ${budget.currency}, ` +
+        `Total requested: ${totalRequestedAmount.toLocaleString()} ${budget.currency}, ` +
+        `Budget limit: ${budget.total_amount} ${budget.currency}`
+      );
+    }
+
+    const rate = getExchangeRate(currency);
+
+    const estimatedUnitPriceIdr = convertToIDR(estimatedUnitPrice, currency);
+    const estimatedTotalIdr = convertToIDR(estimatedTotal, currency);
+
+    const request = this.requestRepo.create({
+      request_no,
+      requester_name: data.requester_name,
+      requester_badge: data.requester_badge,
+      department: data.department,
+      request_type: data.request_type,
+      item_name: data.item_name,
+      specification: data.specification,
+      quantity: quantity,
+      currency,
+      exchange_rate: rate,
+      estimated_unit_price: estimatedUnitPrice,
+      estimated_unit_price_idr: estimatedUnitPriceIdr,
+      estimated_total: estimatedTotal,
+      estimated_total_idr: estimatedTotalIdr,
+      budget_type: data.budget_type,
+      budget_id: data.budget_id,
+      notes: data.notes || null,
+      status: 'DRAFT',
+    });
+
+    const saved = await this.requestRepo.save(request);
+    console.log('Request created:', saved.request_no);
+
+    return saved;
+  } catch (error) {
+    console.error('Error creating request:', error);
+    if (error instanceof Error) {
+      throw new Error(`Failed to create request: ${error.message}`);
+    }
+    throw new Error('Failed to create request');
   }
+}
 
 async deleteRequest(id: number) {
   try {
@@ -433,39 +462,64 @@ async deleteRequest(id: number) {
   }
 }
 
-  async submitRequest(id: number) {
-    const request = await this.requestRepo.findOne({
-      where: { id },
-      relations: ['budget'],
-    });
+async submitRequest(id: number) {
+  const request = await this.requestRepo.findOne({
+    where: { id },
+    relations: ['budget'],
+  });
 
-    if (!request) throw new Error('Request not found');
+  if (!request) throw new Error('Request not found');
 
-    const budget = await this.budgetRepo.findOne({
-      where: { id: request.budget_id },
-    });
+  const budget = await this.budgetRepo.findOne({
+    where: { id: request.budget_id },
+  });
 
-    if (!budget) throw new Error('Budget not found');
+  if (!budget) throw new Error('Budget not found');
 
-    if (budget.remaining_amount >= request.estimated_total) {
-      // Update budget
-      budget.remaining_amount =
-        Number(budget.remaining_amount) - Number(request.estimated_total);
-      budget.used_amount =
-        Number(budget.used_amount) + Number(request.estimated_total);
-      await this.budgetRepo.save(budget);
+  const approvedRequests = await this.requestRepo.find({
+    where: { 
+      budget_id: request.budget_id,
+      status: 'BUDGET_APPROVED'
+    },
+  });
 
-      // Update request
-      request.status = 'BUDGET_APPROVED';
-      request.submitted_at = new Date();
-    } else {
-      request.status = 'BUDGET_REJECTED';
-      request.notes = `Insufficient budget. Remaining: Rp ${budget.remaining_amount.toLocaleString()}`;
-    }
 
+  const totalApprovedAmount = approvedRequests.reduce(
+    (sum, req) => sum + Number(req.estimated_total), 
+    0
+  );
+
+  const totalRequestedAmount = totalApprovedAmount + Number(request.estimated_total);
+
+  // Cek apakah total request (approved + current) melebihi budget
+  if (totalRequestedAmount > Number(budget.total_amount)) {
+    request.status = 'BUDGET_REJECTED';
+    request.notes = `Insufficient budget. Total approved requests: ${totalApprovedAmount.toLocaleString()} ${budget.currency}, Current request: ${request.estimated_total} ${budget.currency}, Total requested: ${totalRequestedAmount.toLocaleString()} ${budget.currency}, Budget limit: ${budget.total_amount} ${budget.currency}`;
+    
     return await this.requestRepo.save(request);
   }
 
+  const requestAmount = Number(request.estimated_total);
+  
+  // Update budget fields
+  budget.used_amount = Number(budget.used_amount) + requestAmount;
+  budget.remaining_amount = Number(budget.total_amount) - Number(budget.used_amount);
+  
+  // Update IDR versions
+  const rate = getExchangeRate(budget.currency);
+  budget.used_amount_idr = Number(budget.used_amount) * rate;
+  budget.remaining_amount_idr = Number(budget.remaining_amount) * rate;
+
+  console.log(`Budget updated: used=${budget.used_amount}, remaining=${budget.remaining_amount}, total=${budget.total_amount}`);
+
+  await this.budgetRepo.save(budget);
+
+  // Update request
+  request.status = 'BUDGET_APPROVED';
+  request.submitted_at = new Date();
+
+  return await this.requestRepo.save(request);
+}
   // Revision
   async getAllRevisions() {
     return await this.revisionRepo.find({
